@@ -264,12 +264,18 @@ impl<T, const N: usize> Vec<T, N> {
     /// Shortens the vector, keeping the first `len` elements and dropping the rest.
     pub fn truncate(&mut self, len: usize) {
         // drop any extra elements
-        while len < self.len {
-            // decrement len before the drop_in_place(), so a panic on Drop
-            // doesn't re-drop the just-failed value.
-            self.len -= 1;
-            let len = self.len;
-            unsafe { ptr::drop_in_place(self.as_mut_slice().get_unchecked_mut(len)) };
+        unsafe {
+            // Note: It's intentional that this is `>` and not `>=`.
+            //       Changing it to `>=` has negative performance
+            //       implications in some cases. See #78884
+            //       for more.
+            if len > self.len {
+                return;
+            }
+            let remaining_len = self.len - len;
+            let s = ptr::slice_from_raw_parts_mut(self.buffer.as_mut_ptr().add(len), remaining_len);
+            self.len = len;
+            ptr::drop_in_place(s);
         }
     }
 
